@@ -42,7 +42,7 @@
   }
 
   .wrap {
-    max-width: 980px;
+    max-width: 1320px;
     margin: 0 auto;
     padding: 40px 24px 80px;
   }
@@ -130,13 +130,6 @@
     margin-bottom: 16px;
   }
 
-  .board {
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    overflow: hidden;
-    background: var(--surface);
-  }
-
   .row {
     display: grid;
     grid-template-columns: auto 1fr auto auto auto;
@@ -187,8 +180,6 @@
     display: none;
   }
 
-  @media (min-width: 720px) { .assignee { display: block; } }
-
   .due {
     font-family: 'JetBrains Mono', monospace;
     font-size: 11.5px;
@@ -206,42 +197,172 @@
     display: none;
   }
 
-  @media (min-width: 720px) { .age { display: block; } }
+  /* Cards now sit side by side, so column visibility responds to the card's
+     own width (container query), not the viewport. */
+  @container status-card (min-width: 460px) { .assignee { display: block; } }
+  @container status-card (min-width: 560px) { .age { display: block; } }
 
-  .summary-board {
+  /* ---- Dashboard layout: product panel + status card grid, side by side ---- */
+
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: minmax(260px, 320px) 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+
+  @media (max-width: 860px) {
+    .dashboard-grid { grid-template-columns: 1fr; }
+  }
+
+  .status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 16px;
+    align-items: start;
+  }
+
+  /* ---- Product panel: donut + legend, doubles as the product filter ---- */
+
+  .product-panel {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--surface);
-    padding: 16px 18px;
-    margin-bottom: 28px;
+    padding: 18px;
+    position: sticky;
+    top: 20px;
   }
 
-  .summary-title {
+  @media (max-width: 860px) {
+    .product-panel { position: static; }
+  }
+
+  .panel-title {
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-faint);
-    margin-bottom: 10px;
+    margin-bottom: 14px;
   }
 
-  .summary-row {
+  .donut-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 220px;
+    margin: 0 auto 16px;
+  }
+
+  .donut-svg { display: block; width: 100%; height: auto; }
+  .donut-svg circle { outline: none; }
+  .donut-svg circle:focus-visible { opacity: 1; filter: brightness(1.2); }
+
+  .donut-center-value {
+    fill: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px;
+    font-weight: 700;
+  }
+
+  .donut-center-caption {
+    fill: var(--text-faint);
+    font-family: 'Inter', sans-serif;
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .legend { display: flex; flex-direction: column; gap: 2px; }
+
+  .legend-row {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 6px 0;
-    font-size: 13.5px;
-    border-bottom: 1px solid var(--border);
+    gap: 8px;
+    padding: 6px 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12.5px;
+    background: transparent;
+    border: none;
+    width: 100%;
+    text-align: left;
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    transition: background 0.12s ease, opacity 0.12s ease;
   }
 
-  .summary-row:last-child { border-bottom: none; }
+  .legend-row:hover { background: var(--surface-raised); }
+  .legend-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .legend-row.dimmed { opacity: 0.4; }
+  .legend-row.active { background: var(--accent-dim); }
 
-  .summary-count {
+  .legend-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  .legend-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .legend-count {
     font-family: 'JetBrains Mono', monospace;
     color: var(--text-muted);
+    font-size: 11.5px;
   }
 
-  .status-section { margin-bottom: 28px; }
+  .clear-filter-btn {
+    display: block;
+    margin: 12px auto 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    padding: 5px 12px;
+    cursor: pointer;
+  }
+
+  .clear-filter-btn:hover { border-color: var(--accent); }
+  .clear-filter-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .donut-tooltip {
+    position: fixed;
+    pointer-events: none;
+    z-index: 20;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 12px;
+    display: none;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+  }
+
+  .donut-tooltip .tt-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .donut-tooltip .tt-label { color: var(--text-muted); margin-top: 1px; }
+
+  /* ---- Status cards ---- */
+
+  .status-section {
+    container: status-card / inline-size;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 16px 16px 4px;
+  }
 
   .status-heading {
     display: flex;
@@ -267,7 +388,12 @@
     font-size: 12px;
     color: var(--text-muted);
     margin-bottom: 10px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
   }
+
+  .rows-list .row:last-child { border-bottom: none; }
+  .rows-list .expand:last-child { border-bottom: none; }
 
   .expand {
     display: none;
@@ -363,6 +489,7 @@
 
     <div class="count-badge" id="countBadge"></div>
     <div id="board"><div class="empty">Loading…</div></div>
+    <div class="donut-tooltip" id="donutTooltip" role="status" aria-live="polite"></div>
     <footer>reads YouTrack "Dev Adhoc" · writes to JIRA via /rest/api/2</footer>
   </div>
 
@@ -372,8 +499,18 @@
   const DASHBOARD_TOKEN = "a73a6059f0362f9715b97e208722fc3f"; // must match the Supabase secret
   // --------------------------------------------------------------------------
 
+  // Fixed-order categorical palette (dark-mode steps), validated with
+  // scripts/validate_palette.js against this page's actual surface (#1a1f28):
+  // all adjacent-pair CVD/contrast/lightness checks pass. Color is assigned
+  // per product name (alphabetical slot), never by count-rank, so a product's
+  // color doesn't shift when the filter changes which slices are dimmed.
+  const CATEGORICAL = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
+  const OTHER_COLOR = "#5b6472";
+  const MAX_DONUT_SLICES = 6; // top 5 products + "Other" fold, per part-to-whole guidance
+
   let issues = [];
   let openKey = null;
+  let activeProductFilter = null;
 
   function categoryClass(colorName) {
     if (colorName === "green") return "cat-done";
@@ -427,6 +564,149 @@
     });
   }
 
+  // Color slot is keyed to the product's name (alphabetical position among all
+  // distinct products), not its rank by count — so a product keeps its color
+  // across refreshes and filter toggles even if the ranking shifts.
+  function productColor(name, allNamesSorted) {
+    if (name === "Other") return OTHER_COLOR;
+    const idx = allNamesSorted.indexOf(name);
+    return CATEGORICAL[idx % CATEGORICAL.length];
+  }
+
+  function productDonutSlices(list) {
+    const totals = groupByProduct(list); // desc by count
+    const allNames = [...new Set(list.map((i) => i.product || "No Product"))].sort();
+    if (totals.length <= MAX_DONUT_SLICES) {
+      return totals.map(([name, count]) => ({ name, count, color: productColor(name, allNames) }));
+    }
+    const top = totals.slice(0, MAX_DONUT_SLICES - 1);
+    const restCount = totals.slice(MAX_DONUT_SLICES - 1).reduce((sum, [, c]) => sum + c, 0);
+    return [
+      ...top.map(([name, count]) => ({ name, count, color: productColor(name, allNames) })),
+      { name: "Other", count: restCount, color: OTHER_COLOR },
+    ];
+  }
+
+  function filteredIssues() {
+    if (!activeProductFilter) return issues;
+    return issues.filter((i) => (i.product || "No Product") === activeProductFilter);
+  }
+
+  function toggleProductFilter(name) {
+    activeProductFilter = activeProductFilter === name ? null : name;
+    render();
+  }
+
+  function renderDonut(slices, total) {
+    const cx = 100, cy = 100, r = 70, sw = 28, GAP = 3;
+    const C = 2 * Math.PI * r;
+    let cum = 0;
+
+    const circles = slices.map((s) => {
+      const frac = total > 0 ? s.count / total : 0;
+      const len = Math.max(frac * C - GAP, 0);
+      const offset = -cum - GAP / 2;
+      cum += frac * C;
+      const isActive = activeProductFilter === s.name;
+      const isDimmed = !!activeProductFilter && !isActive;
+      return `<circle
+        cx="${cx}" cy="${cy}" r="${r}" fill="none"
+        stroke="${s.color}" stroke-width="${isActive ? sw + 6 : sw}" stroke-linecap="butt"
+        stroke-dasharray="${len} ${Math.max(C - len, 0)}" stroke-dashoffset="${offset}"
+        opacity="${isDimmed ? 0.28 : 1}"
+        style="cursor:pointer; transition: stroke-width .15s ease, opacity .15s ease;"
+        data-product="${escapeHtml(s.name)}" data-count="${s.count}"
+        tabindex="0" role="button" aria-pressed="${isActive}"
+        aria-label="${escapeHtml(s.name)}: ${s.count} ticket${s.count === 1 ? "" : "s"}"
+      ></circle>`;
+    }).join("");
+
+    const centerValue = activeProductFilter
+      ? (slices.find((s) => s.name === activeProductFilter)?.count ?? 0)
+      : total;
+    const centerCaption = activeProductFilter
+      ? activeProductFilter
+      : `ticket${total === 1 ? "" : "s"}`;
+
+    return `
+      <div class="donut-wrap">
+        <svg viewBox="0 0 200 200" class="donut-svg" role="img" aria-label="Tickets by product">
+          <g transform="rotate(-90 ${cx} ${cy})">${circles}</g>
+          <text x="${cx}" y="${cy - 4}" text-anchor="middle" class="donut-center-value">${centerValue}</text>
+          <text x="${cx}" y="${cy + 18}" text-anchor="middle" class="donut-center-caption">${escapeHtml(String(centerCaption)).slice(0, 24)}</text>
+        </svg>
+      </div>
+    `;
+  }
+
+  function renderLegend(slices) {
+    return `
+      <div class="legend">
+        ${slices.map((s) => {
+          const isActive = activeProductFilter === s.name;
+          const isDimmed = !!activeProductFilter && !isActive;
+          return `
+            <button type="button" class="legend-row ${isActive ? "active" : ""} ${isDimmed ? "dimmed" : ""}"
+              data-product="${escapeHtml(s.name)}" data-count="${s.count}" aria-pressed="${isActive}">
+              <span class="legend-swatch" style="background:${s.color}"></span>
+              <span class="legend-name">${escapeHtml(s.name)}</span>
+              <span class="legend-count">${s.count}</span>
+            </button>
+          `;
+        }).join("")}
+      </div>
+      ${activeProductFilter ? `<button type="button" class="clear-filter-btn" id="clearFilterBtn">✕ Clear filter</button>` : ""}
+    `;
+  }
+
+  function showDonutTooltip(evt, name, count, total) {
+    const tt = document.getElementById("donutTooltip");
+    const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+    tt.innerHTML = "";
+    const valueEl = document.createElement("div");
+    valueEl.className = "tt-value";
+    valueEl.textContent = `${count} ticket${count === 1 ? "" : "s"} · ${pct}%`;
+    const labelEl = document.createElement("div");
+    labelEl.className = "tt-label";
+    labelEl.textContent = name;
+    tt.appendChild(valueEl);
+    tt.appendChild(labelEl);
+    tt.style.display = "block";
+    const pad = 14;
+    tt.style.left = `${evt.clientX + pad}px`;
+    tt.style.top = `${evt.clientY + pad}px`;
+  }
+
+  function hideDonutTooltip() {
+    document.getElementById("donutTooltip").style.display = "none";
+  }
+
+  function attachProductPanelHandlers(slices, total) {
+    const panel = document.getElementById("productPanel");
+    if (!panel) return;
+
+    const handleActivate = (name) => toggleProductFilter(name);
+
+    panel.querySelectorAll("[data-product]").forEach((el) => {
+      const name = el.dataset.product;
+      const count = Number(el.dataset.count);
+      el.addEventListener("click", () => handleActivate(name));
+      el.addEventListener("keydown", (evt) => {
+        if (evt.key === "Enter" || evt.key === " ") {
+          evt.preventDefault();
+          handleActivate(name);
+        }
+      });
+      el.addEventListener("pointermove", (evt) => showDonutTooltip(evt, name, count, total));
+      el.addEventListener("pointerleave", hideDonutTooltip);
+      el.addEventListener("focus", (evt) => showDonutTooltip(evt, name, count, total));
+      el.addEventListener("blur", hideDonutTooltip);
+    });
+
+    const clearBtn = document.getElementById("clearFilterBtn");
+    if (clearBtn) clearBtn.addEventListener("click", () => { activeProductFilter = null; render(); });
+  }
+
   function renderRow(issue, i) {
     const isOpen = openKey === issue.jiraKey;
     const dueMs = issue.adhocDueDateMs;
@@ -470,37 +750,57 @@
       return;
     }
 
-    countBadge.textContent = `${issues.length} ticket${issues.length === 1 ? "" : "s"} in Dev Adhoc`;
+    // If the active filter no longer matches anything (e.g. after a refresh
+    // where that product has no Dev Adhoc tickets left), drop it rather than
+    // show an empty dashboard.
+    if (activeProductFilter && !issues.some((i) => (i.product || "No Product") === activeProductFilter)) {
+      activeProductFilter = null;
+    }
 
-    const productTotals = groupByProduct(issues);
-    const summaryHtml = `
-      <div class="summary-board">
-        <div class="summary-title">Totals by Product</div>
-        ${productTotals.map(([product, count]) => `
-          <div class="summary-row">
-            <span class="summary-label">${escapeHtml(product)}</span>
-            <span class="summary-count">${count}</span>
-          </div>
-        `).join("")}
+    const scoped = filteredIssues();
+    const filterSuffix = activeProductFilter ? ` · filtered to ${activeProductFilter}` : "";
+    countBadge.textContent = `${scoped.length} of ${issues.length} ticket${issues.length === 1 ? "" : "s"} in Dev Adhoc${filterSuffix}`;
+
+    // The donut always reflects totals across ALL products — it's the filter
+    // control, not something the filter itself scopes.
+    const slices = productDonutSlices(issues);
+    const donutTotal = issues.length;
+
+    const productPanelHtml = `
+      <div class="product-panel" id="productPanel">
+        <div class="panel-title">Tickets by Product</div>
+        ${renderDonut(slices, donutTotal)}
+        ${renderLegend(slices)}
       </div>
     `;
 
-    const statusHtml = groupByStatus(issues).map(([status, group]) => {
-      const breakdown = groupByProduct(group.issues);
-      const rows = group.issues.map((issue, i) => renderRow(issue, i)).join("");
-      return `
-        <div class="status-section">
-          <div class="status-heading ${categoryClass(group.statusCategory)}">
-            <span>${escapeHtml(status)}</span>
-            <span class="status-total">${group.issues.length}</span>
-          </div>
-          <div class="status-breakdown">${breakdown.map(([p, c]) => `${escapeHtml(p)}: ${c}`).join(" · ")}</div>
-          <div class="board">${rows}</div>
-        </div>
-      `;
-    }).join("");
+    const statusGridHtml = `
+      <div class="status-grid">
+        ${groupByStatus(scoped).map(([status, group]) => {
+          const breakdown = groupByProduct(group.issues);
+          const rows = group.issues.map((issue, i) => renderRow(issue, i)).join("");
+          return `
+            <div class="status-section">
+              <div class="status-heading ${categoryClass(group.statusCategory)}">
+                <span>${escapeHtml(status)}</span>
+                <span class="status-total">${group.issues.length}</span>
+              </div>
+              <div class="status-breakdown">${breakdown.map(([p, c]) => `${escapeHtml(p)}: ${c}`).join(" · ")}</div>
+              <div class="rows-list">${rows}</div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    `;
 
-    board.innerHTML = summaryHtml + statusHtml;
+    board.innerHTML = `
+      <div class="dashboard-grid">
+        ${productPanelHtml}
+        ${statusGridHtml}
+      </div>
+    `;
+
+    attachProductPanelHandlers(slices, donutTotal);
   }
 
   function toggleExpand(jiraKey) {
