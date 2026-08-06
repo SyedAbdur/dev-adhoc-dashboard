@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Dev Adhoc → JIRA Bridge</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ===================================================================
+     CONFIG — fill these in before you host/open this file.
+     =================================================================== */
+  :root {
+    --bg: #12161d;
+    --surface: #1a1f28;
+    --surface-raised: #212733;
+    --border: #2b3240;
+    --text: #e7eaef;
+    --text-muted: #8b94a3;
+    --text-faint: #5b6472;
+    --accent: #e8a33d;
+    --accent-dim: rgba(232, 163, 61, 0.14);
+    --todo: #7c8797;
+    --todo-bg: rgba(124, 135, 151, 0.16);
+    --progress: #e8a33d;
+    --progress-bg: rgba(232, 163, 61, 0.16);
+    --done: #4fb286;
+    --done-bg: rgba(79, 178, 134, 0.16);
+    --error: #d9636c;
+    --error-bg: rgba(217, 99, 108, 0.14);
+    --radius: 10px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, sans-serif;
+    min-height: 100vh;
+  }
+
+  .wrap {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 32px;
+    flex-wrap: wrap;
+  }
+
+  .title-block .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .pulse-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--done);
+    box-shadow: 0 0 0 0 rgba(79, 178, 134, 0.6);
+    animation: pulse 2.4s infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pulse-dot { animation: none; }
+  }
+
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(79, 178, 134, 0.5); }
+    70%  { box-shadow: 0 0 0 6px rgba(79, 178, 134, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(79, 178, 134, 0); }
+  }
+
+  h1 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+
+  h1 .arrow { color: var(--accent); margin: 0 8px; }
+
+  .subtitle {
+    color: var(--text-muted);
+    font-size: 13.5px;
+    margin-top: 6px;
+    max-width: 520px;
+  }
+
+  button.refresh {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 16px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+
+  button.refresh:hover { border-color: var(--accent); }
+  button.refresh:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button.refresh:disabled { opacity: 0.5; cursor: default; }
+
+  .count-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+  }
+
+  .board {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--surface);
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    gap: 16px;
+    align-items: center;
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    animation: fadeIn 0.35s ease both;
+  }
+
+  @media (prefers-reduced-motion: reduce) { .row { animation: none; } }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+  .row:last-child { border-bottom: none; }
+  .row:hover { background: var(--surface-raised); }
+
+  .ids {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ids .yt { color: var(--text-muted); }
+  .ids .arrow { color: var(--text-faint); }
+  .ids a { color: var(--text); text-decoration: none; border-bottom: 1px solid var(--border); }
+  .ids a:hover { border-color: var(--accent); color: var(--accent); }
+
+  .summary {
+    min-width: 0;
+    font-size: 13.5px;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .summary .yt-summary { color: var(--text-muted); }
+  .summary .divider { color: var(--text-faint); margin: 0 6px; }
+
+  .assignee {
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    display: none;
+  }
+
+  @media (min-width: 720px) { .assignee { display: block; } }
+
+  .chip {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 100px;
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .chip.cat-todo { color: var(--todo); background: var(--todo-bg); }
+  .chip.cat-progress { color: var(--progress); background: var(--progress-bg); }
+  .chip.cat-done { color: var(--done); background: var(--done-bg); }
+  .chip.cat-unknown { color: var(--text-faint); background: rgba(255,255,255,0.04); }
+
+  .expand {
+    display: none;
+    padding: 0 18px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .expand.open { display: block; }
+  .expand:last-child { border-bottom: none; }
+
+  .expand textarea {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 13.5px;
+    padding: 10px 12px;
+    resize: vertical;
+    min-height: 64px;
+  }
+
+  .expand textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .expand-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .send-btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    background: var(--accent);
+    color: #1a1206;
+    border: none;
+    padding: 8px 16px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .send-btn:disabled { opacity: 0.5; cursor: default; }
+  .send-btn:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+
+  .status-msg { font-size: 12px; }
+  .status-msg.ok { color: var(--done); }
+  .status-msg.err { color: var(--error); }
+
+  .empty, .error-state {
+    padding: 48px 24px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13.5px;
+  }
+
+  .error-state {
+    color: var(--error);
+    background: var(--error-bg);
+    border-radius: var(--radius);
+  }
+
+  .error-state code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text);
+  }
+
+  footer {
+    margin-top: 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-faint);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="title-block">
+        <div class="eyebrow"><span class="pulse-dot"></span> live bridge</div>
+        <h1>Dev Adhoc<span class="arrow">⟶</span>JIRA</h1>
+        <div class="subtitle">Status for every YouTrack issue sitting in <strong>Dev Adhoc</strong>, pulled straight from its linked JIRA ticket. Comment here and it lands in JIRA — no JIRA seat required.</div>
+      </div>
+      <button class="refresh" id="refreshBtn" onclick="loadIssues()">↻ Refresh</button>
+    </header>
+
+    <div class="count-badge" id="countBadge"></div>
+    <div class="board" id="board"><div class="empty">Loading…</div></div>
+    <footer>reads YouTrack "Dev Adhoc" · writes to JIRA via /rest/api/2</footer>
+  </div>
+
+<script>
+  // ---- CONFIG: point this at your deployed Edge Function -----------------
+  const EDGE_FUNCTION_URL = "https://cbrfedvstfokrbcvxzbm.supabase.co/functions/v1/dev-adhoc-dashboard";
+  const DASHBOARD_TOKEN = "a73a6059f0362f9715b97e208722fc3f"; // must match the Supabase secret
+  // --------------------------------------------------------------------------
+
+  let issues = [];
+  let openKey = null;
+
+  function categoryClass(colorName) {
+    if (colorName === "green") return "cat-done";
+    if (colorName === "yellow") return "cat-progress";
+    if (colorName === "blue-gray") return "cat-todo";
+    return "cat-unknown";
+  }
+
+  function escapeHtml(str) {
+    return (str ?? "").replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  }
+
+  function render() {
+    const board = document.getElementById("board");
+    const countBadge = document.getElementById("countBadge");
+
+    if (issues.length === 0) {
+      countBadge.textContent = "";
+      board.innerHTML = '<div class="empty">No Dev Adhoc tickets with a linked JIRA issue right now.</div>';
+      return;
+    }
+
+    countBadge.textContent = `${issues.length} ticket${issues.length === 1 ? "" : "s"} in Dev Adhoc`;
+
+    board.innerHTML = issues.map((issue, i) => {
+      const isOpen = openKey === issue.jiraKey;
+      return `
+        <div class="row" style="animation-delay:${i * 25}ms" onclick="toggleExpand('${issue.jiraKey}')">
+          <div class="ids">
+            <a class="yt" href="${escapeHtml(issue.youtrackUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${escapeHtml(issue.youtrackId)}</a>
+            <span class="arrow">⟶</span>
+            <a href="${escapeHtml(issue.jiraUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${escapeHtml(issue.jiraKey)}</a>
+          </div>
+          <div class="summary">
+            <span class="yt-summary">${escapeHtml(issue.youtrackSummary)}</span>
+            <span class="divider">·</span>
+            ${escapeHtml(issue.jiraSummary || "")}
+          </div>
+          <div class="assignee">${escapeHtml(issue.jiraAssignee || "Unassigned")}</div>
+          <div class="chip ${categoryClass(issue.jiraStatusCategory)}">${escapeHtml(issue.jiraStatus || "Unknown")}</div>
+        </div>
+        <div class="expand ${isOpen ? "open" : ""}" id="expand-${issue.jiraKey}">
+          <textarea placeholder="Comment on ${escapeHtml(issue.jiraKey)}…" id="textarea-${issue.jiraKey}"></textarea>
+          <div class="expand-actions">
+            <button class="send-btn" onclick="event.stopPropagation(); sendComment('${issue.jiraKey}')" id="send-${issue.jiraKey}">Send to JIRA</button>
+            <span class="status-msg" id="status-${issue.jiraKey}"></span>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function toggleExpand(jiraKey) {
+    openKey = openKey === jiraKey ? null : jiraKey;
+    render();
+  }
+
+  async function loadIssues() {
+    const board = document.getElementById("board");
+    const refreshBtn = document.getElementById("refreshBtn");
+    refreshBtn.disabled = true;
+    refreshBtn.textContent = "↻ Refreshing…";
+    board.innerHTML = '<div class="empty">Loading…</div>';
+
+    try {
+      const res = await fetch(`${EDGE_FUNCTION_URL}/list`, {
+        headers: { "X-Dashboard-Token": DASHBOARD_TOKEN }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+      issues = data.issues || [];
+      render();
+    } catch (err) {
+      board.innerHTML = `<div class="error-state">Couldn't load tickets.<br><code>${escapeHtml(err.message)}</code><br>Check EDGE_FUNCTION_URL and DASHBOARD_TOKEN at the top of this file, and that the Edge Function is deployed.</div>`;
+    } finally {
+      refreshBtn.disabled = false;
+      refreshBtn.textContent = "↻ Refresh";
+    }
+  }
+
+  async function sendComment(jiraKey) {
+    const textarea = document.getElementById(`textarea-${jiraKey}`);
+    const sendBtn = document.getElementById(`send-${jiraKey}`);
+    const statusEl = document.getElementById(`status-${jiraKey}`);
+    const body = textarea.value.trim();
+
+    if (!body) {
+      statusEl.textContent = "Write something first.";
+      statusEl.className = "status-msg err";
+      return;
+    }
+
+    sendBtn.disabled = true;
+    statusEl.textContent = "Sending…";
+    statusEl.className = "status-msg";
+
+    try {
+      const res = await fetch(`${EDGE_FUNCTION_URL}/comment`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Dashboard-Token": DASHBOARD_TOKEN
+        },
+        body: JSON.stringify({ jiraKey, body })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+      statusEl.textContent = "Posted to JIRA ✓";
+      statusEl.className = "status-msg ok";
+      textarea.value = "";
+    } catch (err) {
+      statusEl.textContent = err.message;
+      statusEl.className = "status-msg err";
+    } finally {
+      sendBtn.disabled = false;
+    }
+  }
+
+  loadIssues();
+</script>
+</body>
+</html>
