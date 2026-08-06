@@ -819,6 +819,20 @@
   }
 
   function render() {
+    // layoutMasonry clears and rebuilds the status grid incrementally while
+    // measuring heights, so the page is briefly much shorter mid-render —
+    // the browser clamps scroll to fit, and nothing restores it afterward.
+    // Save/restore across the whole render so expanding a ticket lower on
+    // the page doesn't jump back to the top.
+    const scrollY = window.scrollY;
+    try {
+      renderInner();
+    } finally {
+      window.scrollTo(0, scrollY);
+    }
+  }
+
+  function renderInner() {
     const board = document.getElementById("board");
     const countBadge = document.getElementById("countBadge");
 
