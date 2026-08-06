@@ -197,10 +197,10 @@
     display: none;
   }
 
-  /* Cards now sit side by side, so column visibility responds to the card's
-     own width (container query), not the viewport. */
-  @container status-card (min-width: 460px) { .assignee { display: block; } }
-  @container status-card (min-width: 560px) { .age { display: block; } }
+  /* Cards now sit in a masonry column (column-width: 360px), not full-width
+     grid cells, so these thresholds need to be reachable at that width. */
+  @container status-card (min-width: 300px) { .assignee { display: block; } }
+  @container status-card (min-width: 360px) { .age { display: block; } }
 
   /* ---- Dashboard layout: product panel + status card grid, side by side ---- */
 
