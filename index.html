@@ -425,6 +425,32 @@
   .expand.open { display: block; }
   .expand:last-child { border-bottom: none; }
 
+  .expand-details {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .expand-field {
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.5;
+  }
+
+  .expand-field-label {
+    display: inline-block;
+    min-width: 68px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-faint);
+    margin-right: 8px;
+  }
+
   .expand textarea {
     width: 100%;
     background: var(--bg);
@@ -778,6 +804,11 @@
         <div class="age">${ageDays != null ? `${ageDays}d old` : ""}</div>
       </div>
       <div class="expand ${isOpen ? "open" : ""}" id="expand-${issue.jiraKey}">
+        <div class="expand-details">
+          <div class="expand-field"><span class="expand-field-label">YouTrack</span>${escapeHtml(issue.youtrackSummary)}</div>
+          <div class="expand-field"><span class="expand-field-label">JIRA</span>${escapeHtml(issue.jiraSummary || "—")}</div>
+          <div class="expand-field"><span class="expand-field-label">Assignee</span>${escapeHtml(issue.jiraAssignee || "Unassigned")}</div>
+        </div>
         <textarea placeholder="Comment on ${escapeHtml(issue.jiraKey)}…" id="textarea-${issue.jiraKey}"></textarea>
         <div class="expand-actions">
           <button class="send-btn" onclick="event.stopPropagation(); sendComment('${issue.jiraKey}')" id="send-${issue.jiraKey}">Send to JIRA</button>
