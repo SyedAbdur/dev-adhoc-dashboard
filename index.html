@@ -215,13 +215,25 @@
     .dashboard-grid { grid-template-columns: 1fr; }
   }
 
-  /* Multi-column instead of CSS grid: grid gives every row the height of its
-     tallest card, so a 1-ticket board leaves a dead gap under it when its row
-     neighbor has 8. Columns pack each card by its own rendered height, so
-     card height (and gaps) tracks actual ticket count. */
+  /* True masonry, laid out in JS (see layoutMasonry): CSS grid gives every row
+     the height of its tallest card, leaving dead gaps under short cards.
+     CSS multi-column avoids that but can't guarantee break-inside: avoid holds
+     when column-balancing meets very uneven card heights — it will fragment
+     a tall card across the column boundary rather than leave columns uneven.
+     JS masonry places each card as one real DOM node in the shortest column,
+     so a card can never be split. */
   .status-grid {
-    column-width: 360px;
-    column-gap: 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .masonry-col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    flex: 1 1 0;
+    min-width: 0;
   }
 
   /* ---- Product panel: donut + legend, doubles as the product filter ---- */
@@ -364,10 +376,6 @@
     border-radius: var(--radius);
     background: var(--surface);
     padding: 16px 16px 4px;
-    break-inside: avoid;
-    display: inline-block;
-    width: 100%;
-    margin-bottom: 16px;
   }
 
   .status-heading {
@@ -705,6 +713,40 @@
     if (clearBtn) clearBtn.addEventListener("click", () => { activeProductFilter = null; render(); });
   }
 
+  function htmlToElement(html) {
+    const template = document.createElement("template");
+    template.innerHTML = html.trim();
+    return template.content.firstElementChild;
+  }
+
+  // Real masonry: each card is placed as an actual DOM node in whichever
+  // column is currently shortest (measured, not estimated), so a card can
+  // never be split across a column boundary the way CSS multi-column can.
+  function layoutMasonry(container, cardEls, minColWidth, maxCols) {
+    container.innerHTML = "";
+    const width = container.clientWidth || minColWidth;
+    const colCount = Math.max(1, Math.min(maxCols, Math.floor(width / minColWidth)));
+    const cols = [];
+    for (let i = 0; i < colCount; i++) {
+      const col = document.createElement("div");
+      col.className = "masonry-col";
+      container.appendChild(col);
+      cols.push(col);
+    }
+    cardEls.forEach((card) => {
+      const shortest = cols.reduce((a, b) => (b.offsetHeight < a.offsetHeight ? b : a));
+      shortest.appendChild(card);
+    });
+  }
+
+  function debounce(fn, ms) {
+    let t;
+    return (...args) => {
+      clearTimeout(t);
+      t = setTimeout(() => fn(...args), ms);
+    };
+  }
+
   function renderRow(issue, i) {
     const isOpen = openKey === issue.jiraKey;
     const dueMs = issue.adhocDueDateMs;
@@ -772,34 +814,35 @@
       </div>
     `;
 
-    const statusGridHtml = `
-      <div class="status-grid">
-        ${groupByStatus(scoped).map(([status, group]) => {
-          const breakdown = groupByProduct(group.issues);
-          const rows = group.issues.map((issue, i) => renderRow(issue, i)).join("");
-          return `
-            <div class="status-section">
-              <div class="status-heading ${categoryClass(group.statusCategory)}">
-                <span>${escapeHtml(status)}</span>
-                <span class="status-total">${group.issues.length}</span>
-              </div>
-              <div class="status-breakdown">${breakdown.map(([p, c]) => `${escapeHtml(p)}: ${c}`).join(" · ")}</div>
-              <div class="rows-list">${rows}</div>
-            </div>
-          `;
-        }).join("")}
-      </div>
-    `;
+    const cardEls = groupByStatus(scoped).map(([status, group]) => {
+      const breakdown = groupByProduct(group.issues);
+      const rows = group.issues.map((issue, i) => renderRow(issue, i)).join("");
+      return htmlToElement(`
+        <div class="status-section">
+          <div class="status-heading ${categoryClass(group.statusCategory)}">
+            <span>${escapeHtml(status)}</span>
+            <span class="status-total">${group.issues.length}</span>
+          </div>
+          <div class="status-breakdown">${breakdown.map(([p, c]) => `${escapeHtml(p)}: ${c}`).join(" · ")}</div>
+          <div class="rows-list">${rows}</div>
+        </div>
+      `);
+    });
 
     board.innerHTML = `
       <div class="dashboard-grid">
         ${productPanelHtml}
-        ${statusGridHtml}
+        <div class="status-grid" id="statusGrid"></div>
       </div>
     `;
 
     attachProductPanelHandlers(slices, donutTotal);
+    layoutMasonry(document.getElementById("statusGrid"), cardEls, 360, 3);
   }
+
+  window.addEventListener("resize", debounce(() => {
+    if (issues.length > 0) render();
+  }, 200));
 
   function toggleExpand(jiraKey) {
     openKey = openKey === jiraKey ? null : jiraKey;
