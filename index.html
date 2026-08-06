@@ -139,7 +139,7 @@
 
   .row {
     display: grid;
-    grid-template-columns: auto 1fr auto auto;
+    grid-template-columns: auto 1fr auto auto auto;
     gap: 16px;
     align-items: center;
     padding: 16px 18px;
@@ -189,20 +189,85 @@
 
   @media (min-width: 720px) { .assignee { display: block; } }
 
-  .chip {
+  .due {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    padding: 4px 10px;
-    border-radius: 100px;
+    font-size: 11.5px;
+    color: var(--text-muted);
     white-space: nowrap;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
   }
 
-  .chip.cat-todo { color: var(--todo); background: var(--todo-bg); }
-  .chip.cat-progress { color: var(--progress); background: var(--progress-bg); }
-  .chip.cat-done { color: var(--done); background: var(--done-bg); }
-  .chip.cat-unknown { color: var(--text-faint); background: rgba(255,255,255,0.04); }
+  .due.overdue { color: var(--error); }
+
+  .age {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    color: var(--text-faint);
+    white-space: nowrap;
+    display: none;
+  }
+
+  @media (min-width: 720px) { .age { display: block; } }
+
+  .summary-board {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 16px 18px;
+    margin-bottom: 28px;
+  }
+
+  .summary-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin-bottom: 10px;
+  }
+
+  .summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    font-size: 13.5px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .summary-row:last-child { border-bottom: none; }
+
+  .summary-count {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-muted);
+  }
+
+  .status-section { margin-bottom: 28px; }
+
+  .status-heading {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .status-heading.cat-todo { color: var(--todo); }
+  .status-heading.cat-progress { color: var(--progress); }
+  .status-heading.cat-done { color: var(--done); }
+  .status-heading.cat-unknown { color: var(--text); }
+
+  .status-total {
+    color: var(--text-muted);
+    font-weight: 400;
+  }
+
+  .status-breakdown {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
 
   .expand {
     display: none;
@@ -259,12 +324,15 @@
     text-align: center;
     color: var(--text-muted);
     font-size: 13.5px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
   }
 
   .error-state {
     color: var(--error);
     background: var(--error-bg);
-    border-radius: var(--radius);
+    border-color: var(--error-bg);
   }
 
   .error-state code {
@@ -294,7 +362,7 @@
     </header>
 
     <div class="count-badge" id="countBadge"></div>
-    <div class="board" id="board"><div class="empty">Loading…</div></div>
+    <div id="board"><div class="empty">Loading…</div></div>
     <footer>reads YouTrack "Dev Adhoc" · writes to JIRA via /rest/api/2</footer>
   </div>
 
@@ -314,10 +382,82 @@
     return "cat-unknown";
   }
 
+  function categoryRank(colorName) {
+    if (colorName === "blue-gray") return 0;
+    if (colorName === "yellow") return 1;
+    if (colorName === "green") return 2;
+    return 3;
+  }
+
   function escapeHtml(str) {
     return (str ?? "").replace(/[&<>"']/g, (c) => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
     }[c]));
+  }
+
+  function formatDate(ms) {
+    if (!ms) return null;
+    return new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  }
+
+  function daysSince(ms) {
+    if (!ms) return null;
+    return Math.floor((Date.now() - ms) / 86400000);
+  }
+
+  function groupByProduct(list) {
+    const counts = new Map();
+    for (const issue of list) {
+      const key = issue.product || "No Product";
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  }
+
+  function groupByStatus(list) {
+    const groups = new Map();
+    for (const issue of list) {
+      const key = issue.jiraStatus || "Unknown";
+      if (!groups.has(key)) groups.set(key, { statusCategory: issue.jiraStatusCategory, issues: [] });
+      groups.get(key).issues.push(issue);
+    }
+    return [...groups.entries()].sort((a, b) => {
+      const rankDiff = categoryRank(a[1].statusCategory) - categoryRank(b[1].statusCategory);
+      return rankDiff !== 0 ? rankDiff : a[0].localeCompare(b[0]);
+    });
+  }
+
+  function renderRow(issue, i) {
+    const isOpen = openKey === issue.jiraKey;
+    const dueMs = issue.adhocDueDateMs;
+    const dueLabel = formatDate(dueMs);
+    const isOverdue = !!dueMs && dueMs < Date.now() && issue.jiraStatusCategory !== "green";
+    const ageDays = daysSince(issue.youtrackCreatedMs);
+
+    return `
+      <div class="row" style="animation-delay:${i * 25}ms" onclick="toggleExpand('${issue.jiraKey}')">
+        <div class="ids">
+          <a class="yt" href="${escapeHtml(issue.youtrackUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${escapeHtml(issue.youtrackId)}</a>
+          <span class="arrow">⟶</span>
+          <a href="${escapeHtml(issue.jiraUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${escapeHtml(issue.jiraKey)}</a>
+        </div>
+        <div class="summary">
+          <span class="yt-summary">${escapeHtml(issue.youtrackSummary)}</span>
+          <span class="divider">·</span>
+          ${escapeHtml(issue.jiraSummary || "")}
+        </div>
+        <div class="assignee">${escapeHtml(issue.jiraAssignee || "Unassigned")}</div>
+        <div class="due ${isOverdue ? "overdue" : ""}">${dueLabel ? `Due ${escapeHtml(dueLabel)}` : "No due date"}</div>
+        <div class="age">${ageDays != null ? `${ageDays}d old` : ""}</div>
+      </div>
+      <div class="expand ${isOpen ? "open" : ""}" id="expand-${issue.jiraKey}">
+        <textarea placeholder="Comment on ${escapeHtml(issue.jiraKey)}…" id="textarea-${issue.jiraKey}"></textarea>
+        <div class="expand-actions">
+          <button class="send-btn" onclick="event.stopPropagation(); sendComment('${issue.jiraKey}')" id="send-${issue.jiraKey}">Send to JIRA</button>
+          <span class="status-msg" id="status-${issue.jiraKey}"></span>
+        </div>
+      </div>
+    `;
   }
 
   function render() {
@@ -332,32 +472,35 @@
 
     countBadge.textContent = `${issues.length} ticket${issues.length === 1 ? "" : "s"} in Dev Adhoc`;
 
-    board.innerHTML = issues.map((issue, i) => {
-      const isOpen = openKey === issue.jiraKey;
+    const productTotals = groupByProduct(issues);
+    const summaryHtml = `
+      <div class="summary-board">
+        <div class="summary-title">Totals by Product</div>
+        ${productTotals.map(([product, count]) => `
+          <div class="summary-row">
+            <span class="summary-label">${escapeHtml(product)}</span>
+            <span class="summary-count">${count}</span>
+          </div>
+        `).join("")}
+      </div>
+    `;
+
+    const statusHtml = groupByStatus(issues).map(([status, group]) => {
+      const breakdown = groupByProduct(group.issues);
+      const rows = group.issues.map((issue, i) => renderRow(issue, i)).join("");
       return `
-        <div class="row" style="animation-delay:${i * 25}ms" onclick="toggleExpand('${issue.jiraKey}')">
-          <div class="ids">
-            <a class="yt" href="${escapeHtml(issue.youtrackUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${escapeHtml(issue.youtrackId)}</a>
-            <span class="arrow">⟶</span>
-            <a href="${escapeHtml(issue.jiraUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${escapeHtml(issue.jiraKey)}</a>
+        <div class="status-section">
+          <div class="status-heading ${categoryClass(group.statusCategory)}">
+            <span>${escapeHtml(status)}</span>
+            <span class="status-total">${group.issues.length}</span>
           </div>
-          <div class="summary">
-            <span class="yt-summary">${escapeHtml(issue.youtrackSummary)}</span>
-            <span class="divider">·</span>
-            ${escapeHtml(issue.jiraSummary || "")}
-          </div>
-          <div class="assignee">${escapeHtml(issue.jiraAssignee || "Unassigned")}</div>
-          <div class="chip ${categoryClass(issue.jiraStatusCategory)}">${escapeHtml(issue.jiraStatus || "Unknown")}</div>
-        </div>
-        <div class="expand ${isOpen ? "open" : ""}" id="expand-${issue.jiraKey}">
-          <textarea placeholder="Comment on ${escapeHtml(issue.jiraKey)}…" id="textarea-${issue.jiraKey}"></textarea>
-          <div class="expand-actions">
-            <button class="send-btn" onclick="event.stopPropagation(); sendComment('${issue.jiraKey}')" id="send-${issue.jiraKey}">Send to JIRA</button>
-            <span class="status-msg" id="status-${issue.jiraKey}"></span>
-          </div>
+          <div class="status-breakdown">${breakdown.map(([p, c]) => `${escapeHtml(p)}: ${c}`).join(" · ")}</div>
+          <div class="board">${rows}</div>
         </div>
       `;
     }).join("");
+
+    board.innerHTML = summaryHtml + statusHtml;
   }
 
   function toggleExpand(jiraKey) {
