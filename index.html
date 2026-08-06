@@ -215,11 +215,13 @@
     .dashboard-grid { grid-template-columns: 1fr; }
   }
 
+  /* Multi-column instead of CSS grid: grid gives every row the height of its
+     tallest card, so a 1-ticket board leaves a dead gap under it when its row
+     neighbor has 8. Columns pack each card by its own rendered height, so
+     card height (and gaps) tracks actual ticket count. */
   .status-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-    gap: 16px;
-    align-items: start;
+    column-width: 360px;
+    column-gap: 16px;
   }
 
   /* ---- Product panel: donut + legend, doubles as the product filter ---- */
@@ -362,6 +364,10 @@
     border-radius: var(--radius);
     background: var(--surface);
     padding: 16px 16px 4px;
+    break-inside: avoid;
+    display: inline-block;
+    width: 100%;
+    margin-bottom: 16px;
   }
 
   .status-heading {
@@ -505,8 +511,6 @@
   // per product name (alphabetical slot), never by count-rank, so a product's
   // color doesn't shift when the filter changes which slices are dimmed.
   const CATEGORICAL = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
-  const OTHER_COLOR = "#5b6472";
-  const MAX_DONUT_SLICES = 6; // top 5 products + "Other" fold, per part-to-whole guidance
 
   let issues = [];
   let openKey = null;
@@ -566,9 +570,11 @@
 
   // Color slot is keyed to the product's name (alphabetical position among all
   // distinct products), not its rank by count — so a product keeps its color
-  // across refreshes and filter toggles even if the ranking shifts.
+  // across refreshes and filter toggles even if the ranking shifts. Past 8
+  // distinct products, hues repeat (only 8 CVD-safe slots exist) — identity
+  // still holds because every slice and legend row carries the product's
+  // actual name as text, never color alone.
   function productColor(name, allNamesSorted) {
-    if (name === "Other") return OTHER_COLOR;
     const idx = allNamesSorted.indexOf(name);
     return CATEGORICAL[idx % CATEGORICAL.length];
   }
@@ -576,15 +582,7 @@
   function productDonutSlices(list) {
     const totals = groupByProduct(list); // desc by count
     const allNames = [...new Set(list.map((i) => i.product || "No Product"))].sort();
-    if (totals.length <= MAX_DONUT_SLICES) {
-      return totals.map(([name, count]) => ({ name, count, color: productColor(name, allNames) }));
-    }
-    const top = totals.slice(0, MAX_DONUT_SLICES - 1);
-    const restCount = totals.slice(MAX_DONUT_SLICES - 1).reduce((sum, [, c]) => sum + c, 0);
-    return [
-      ...top.map(([name, count]) => ({ name, count, color: productColor(name, allNames) })),
-      { name: "Other", count: restCount, color: OTHER_COLOR },
-    ];
+    return totals.map(([name, count]) => ({ name, count, color: productColor(name, allNames) }));
   }
 
   function filteredIssues() {
