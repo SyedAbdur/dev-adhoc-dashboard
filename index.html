@@ -227,6 +227,13 @@
   .ids .arrow { color: var(--text-faint); }
   .ids a { color: var(--text); text-decoration: none; border-bottom: 1px solid var(--border); }
   .ids a:hover { border-color: var(--accent); color: var(--accent); }
+  .ids .no-jira { color: var(--text-faint); font-style: italic; cursor: help; }
+
+  .no-jira-note {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    font-style: italic;
+  }
 
   .summary {
     min-width: 0;
@@ -910,18 +917,33 @@
   }
 
   function renderRow(issue, i) {
-    const isOpen = openKey === issue.jiraKey;
+    const rowKey = issue.youtrackId;
+    const isOpen = openKey === rowKey;
+    const hasJira = !!issue.jiraKey;
     const dueMs = issue.adhocDueDateMs;
     const dueLabel = formatDate(dueMs);
     const isOverdue = !!dueMs && dueMs < Date.now() && issue.jiraStatusCategory !== "green";
     const ageDays = daysSince(issue.youtrackCreatedMs);
 
+    const jiraCell = hasJira
+      ? `<a href="${escapeHtml(issue.jiraUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${escapeHtml(issue.jiraKey)}</a>`
+      : `<span class="no-jira" title="${escapeHtml(issue.jiraLinkRaw || "field is empty")}">No JIRA task</span>`;
+
+    const commentSection = hasJira
+      ? `
+        <textarea placeholder="Comment on ${escapeHtml(issue.jiraKey)}…" id="textarea-${rowKey}"></textarea>
+        <div class="expand-actions">
+          <button class="send-btn" onclick="event.stopPropagation(); sendComment('${issue.jiraKey}', '${rowKey}')" id="send-${rowKey}">Send to JIRA</button>
+          <span class="status-msg" id="status-${rowKey}"></span>
+        </div>`
+      : `<div class="no-jira-note">No linked JIRA ticket to comment on — fix "Adhoc JIRA Link" on ${escapeHtml(issue.youtrackId)} in YouTrack to enable this.</div>`;
+
     return `
-      <div class="row" style="animation-delay:${i * 25}ms" onclick="toggleExpand('${issue.jiraKey}')">
+      <div class="row" style="animation-delay:${i * 25}ms" onclick="toggleExpand('${rowKey}')">
         <div class="ids">
           <a class="yt" href="${escapeHtml(issue.youtrackUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${escapeHtml(issue.youtrackId)}</a>
           <span class="arrow">⟶</span>
-          <a href="${escapeHtml(issue.jiraUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${escapeHtml(issue.jiraKey)}</a>
+          ${jiraCell}
         </div>
         <div class="summary">
           <span class="yt-summary">${escapeHtml(issue.youtrackSummary)}</span>
@@ -932,17 +954,13 @@
         <div class="due ${isOverdue ? "overdue" : ""}">${dueLabel ? `Due ${escapeHtml(dueLabel)}` : "No due date"}</div>
         <div class="age">${ageDays != null ? `${ageDays}d old` : ""}</div>
       </div>
-      <div class="expand ${isOpen ? "open" : ""}" id="expand-${issue.jiraKey}">
+      <div class="expand ${isOpen ? "open" : ""}" id="expand-${rowKey}">
         <div class="expand-details">
           <div class="expand-field"><span class="expand-field-label">YouTrack</span>${escapeHtml(issue.youtrackSummary)}</div>
           <div class="expand-field"><span class="expand-field-label">JIRA</span>${escapeHtml(issue.jiraSummary || "—")}</div>
           <div class="expand-field"><span class="expand-field-label">Assignee</span>${escapeHtml(issue.jiraAssignee || "Unassigned")}</div>
         </div>
-        <textarea placeholder="Comment on ${escapeHtml(issue.jiraKey)}…" id="textarea-${issue.jiraKey}"></textarea>
-        <div class="expand-actions">
-          <button class="send-btn" onclick="event.stopPropagation(); sendComment('${issue.jiraKey}')" id="send-${issue.jiraKey}">Send to JIRA</button>
-          <span class="status-msg" id="status-${issue.jiraKey}"></span>
-        </div>
+        ${commentSection}
       </div>
     `;
   }
@@ -967,7 +985,7 @@
 
     if (issues.length === 0) {
       countBadge.textContent = "";
-      board.innerHTML = '<div class="empty">No Dev Adhoc tickets with a linked JIRA issue right now.</div>';
+      board.innerHTML = '<div class="empty">No Dev Adhoc tickets right now.</div>';
       return;
     }
 
@@ -1025,8 +1043,8 @@
     if (issues.length > 0) render();
   }, 200));
 
-  function toggleExpand(jiraKey) {
-    openKey = openKey === jiraKey ? null : jiraKey;
+  function toggleExpand(rowKey) {
+    openKey = openKey === rowKey ? null : rowKey;
     render();
   }
 
@@ -1068,10 +1086,10 @@
     }
   }
 
-  async function sendComment(jiraKey) {
-    const textarea = document.getElementById(`textarea-${jiraKey}`);
-    const sendBtn = document.getElementById(`send-${jiraKey}`);
-    const statusEl = document.getElementById(`status-${jiraKey}`);
+  async function sendComment(jiraKey, rowKey) {
+    const textarea = document.getElementById(`textarea-${rowKey}`);
+    const sendBtn = document.getElementById(`send-${rowKey}`);
+    const statusEl = document.getElementById(`status-${rowKey}`);
     const body = textarea.value.trim();
 
     if (!body) {
