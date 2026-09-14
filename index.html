@@ -123,6 +123,70 @@
   button.refresh:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   button.refresh:disabled { opacity: 0.5; cursor: default; }
 
+  .token-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(8, 10, 14, 0.72);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 24px;
+  }
+
+  .token-modal {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    width: 100%;
+    max-width: 380px;
+  }
+
+  .token-modal h2 {
+    margin: 0 0 8px;
+    font-size: 16px;
+  }
+
+  .token-modal p {
+    margin: 0 0 16px;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .token-modal input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 12px;
+    border-radius: var(--radius);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+
+  .token-modal input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .token-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .token-modal-actions button {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    padding: 8px 14px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    border: 1px solid var(--border);
+  }
+
+  .token-modal-actions .btn-cancel { background: transparent; color: var(--text-muted); }
+  .token-modal-actions .btn-save { background: var(--accent); color: #1a1305; border-color: var(--accent); font-weight: 600; }
+
   .count-badge {
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
@@ -531,7 +595,10 @@
         <h1>Dev Adhoc<span class="arrow">⟶</span>JIRA</h1>
         <div class="subtitle">Status for every YouTrack issue sitting in <strong>Dev Adhoc</strong>, pulled straight from its linked JIRA ticket. Comment here and it lands in JIRA — no JIRA seat required.</div>
       </div>
-      <button class="refresh" id="refreshBtn" onclick="loadIssues()">↻ Refresh</button>
+      <div style="display:flex; gap:8px;">
+        <button class="refresh" id="tokenBtn" onclick="changeToken()" title="Set or change the dashboard access token">🔑 Token</button>
+        <button class="refresh" id="refreshBtn" onclick="loadIssues()">↻ Refresh</button>
+      </div>
     </header>
 
     <div class="count-badge" id="countBadge"></div>
@@ -540,11 +607,71 @@
     <footer>reads YouTrack "Dev Adhoc" · writes to JIRA via /rest/api/2</footer>
   </div>
 
+  <div class="token-modal-overlay" id="tokenModal" hidden>
+    <div class="token-modal">
+      <h2>Dashboard access token</h2>
+      <p>Ask in Slack (or check 1Password) for the current token, then paste it here. It's stored only in this browser.</p>
+      <input type="password" id="tokenInput" autocomplete="off" spellcheck="false" placeholder="token" />
+      <div class="token-modal-actions">
+        <button class="btn-cancel" id="tokenCancelBtn" type="button">Cancel</button>
+        <button class="btn-save" id="tokenSaveBtn" type="button">Save</button>
+      </div>
+    </div>
+  </div>
+
 <script>
   // ---- CONFIG: point this at your deployed Edge Function -----------------
   const EDGE_FUNCTION_URL = "https://cbrfedvstfokrbcvxzbm.supabase.co/functions/v1/dev-adhoc-dashboard";
-  const DASHBOARD_TOKEN = "a73a6059f0362f9715b97e208722fc3f"; // must match the Supabase secret
   // --------------------------------------------------------------------------
+
+  // No token is hardcoded here on purpose — this file is hosted from a public
+  // repo. The token lives only in each visitor's browser (localStorage),
+  // handed out to them out-of-band (Slack/1Password), never committed.
+  const TOKEN_KEY = "devAdhocDashboardToken";
+
+  function getToken() {
+    return localStorage.getItem(TOKEN_KEY) || "";
+  }
+
+  function promptForToken() {
+    return new Promise((resolve) => {
+      const overlay = document.getElementById("tokenModal");
+      const input = document.getElementById("tokenInput");
+      const saveBtn = document.getElementById("tokenSaveBtn");
+      const cancelBtn = document.getElementById("tokenCancelBtn");
+
+      input.value = "";
+      overlay.hidden = false;
+      input.focus();
+
+      function cleanup(result) {
+        overlay.hidden = true;
+        saveBtn.removeEventListener("click", onSave);
+        cancelBtn.removeEventListener("click", onCancel);
+        input.removeEventListener("keydown", onKeydown);
+        resolve(result);
+      }
+      function onSave() {
+        const val = input.value.trim();
+        if (!val) return;
+        localStorage.setItem(TOKEN_KEY, val);
+        cleanup(true);
+      }
+      function onCancel() { cleanup(false); }
+      function onKeydown(evt) {
+        if (evt.key === "Enter") onSave();
+        else if (evt.key === "Escape") onCancel();
+      }
+
+      saveBtn.addEventListener("click", onSave);
+      cancelBtn.addEventListener("click", onCancel);
+      input.addEventListener("keydown", onKeydown);
+    });
+  }
+
+  async function changeToken() {
+    if (await promptForToken()) loadIssues();
+  }
 
   // Fixed-order categorical palette (dark-mode steps), validated with
   // scripts/validate_palette.js against this page's actual surface (#1a1f28):
@@ -904,20 +1031,35 @@
   async function loadIssues() {
     const board = document.getElementById("board");
     const refreshBtn = document.getElementById("refreshBtn");
+
+    let token = getToken();
+    if (!token) {
+      if (!(await promptForToken())) {
+        board.innerHTML = `<div class="error-state">A dashboard access token is required.<br>Click <strong>🔑 Token</strong> above to enter it.</div>`;
+        return;
+      }
+      token = getToken();
+    }
+
     refreshBtn.disabled = true;
     refreshBtn.textContent = "↻ Refreshing…";
     board.innerHTML = '<div class="empty">Loading…</div>';
 
     try {
       const res = await fetch(`${EDGE_FUNCTION_URL}/list`, {
-        headers: { "X-Dashboard-Token": DASHBOARD_TOKEN }
+        headers: { "X-Dashboard-Token": token }
       });
       const data = await res.json();
+      if (res.status === 401) {
+        localStorage.removeItem(TOKEN_KEY);
+        board.innerHTML = `<div class="error-state">Access token was rejected.<br>Click <strong>🔑 Token</strong> above to re-enter it.</div>`;
+        return;
+      }
       if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
       issues = data.issues || [];
       render();
     } catch (err) {
-      board.innerHTML = `<div class="error-state">Couldn't load tickets.<br><code>${escapeHtml(err.message)}</code><br>Check EDGE_FUNCTION_URL and DASHBOARD_TOKEN at the top of this file, and that the Edge Function is deployed.</div>`;
+      board.innerHTML = `<div class="error-state">Couldn't load tickets.<br><code>${escapeHtml(err.message)}</code><br>Check that the Edge Function is deployed and reachable.</div>`;
     } finally {
       refreshBtn.disabled = false;
       refreshBtn.textContent = "↻ Refresh";
@@ -936,6 +1078,13 @@
       return;
     }
 
+    const token = getToken();
+    if (!token) {
+      statusEl.textContent = "Set a dashboard token first (🔑 Token above).";
+      statusEl.className = "status-msg err";
+      return;
+    }
+
     sendBtn.disabled = true;
     statusEl.textContent = "Sending…";
     statusEl.className = "status-msg";
@@ -945,10 +1094,16 @@
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Dashboard-Token": DASHBOARD_TOKEN
+          "X-Dashboard-Token": token
         },
         body: JSON.stringify({ jiraKey, body })
       });
+      if (res.status === 401) {
+        localStorage.removeItem(TOKEN_KEY);
+        statusEl.textContent = "Access token was rejected. Click 🔑 Token above to re-enter it.";
+        statusEl.className = "status-msg err";
+        return;
+      }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
       statusEl.textContent = "Posted to JIRA ✓";
